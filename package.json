@@ -1,0 +1,15 @@
+{
+  "name": "crux",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Crux — learn any topic by arguing about it.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "mock": "MOCK=1 node server.js"
+  },
+  "engines": { "node": ">=20.12" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0"
+  }
+}
