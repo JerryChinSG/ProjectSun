@@ -108,7 +108,7 @@ async function home() {
       <h1>What do you want to be able to hold your own on?</h1>
       <p>Type a claim, a question, or just a subject. Crux researches it, maps what you need to know, and seats you at a table of people who disagree.</p>
       <form class="ask" id="ask">
-        <textarea id="topic" placeholder="e.g. Raising interest rates won't solve the inflation caused by an Iran war" maxlength="400"></textarea>
+        <textarea id="topic" placeholder="e.g. Raising interest rates won't solve the inflation caused by an Iran war"></textarea>
         <button class="btn" ${G.hasKey ? "" : "disabled"}>Open it →</button>
       </form>
       <div class="examples">${EXAMPLES.map((e) => `<button class="chip" data-ex="${esc(e)}">${esc(e)}</button>`).join("")}</div>
@@ -149,7 +149,7 @@ async function home() {
   ta.onkeydown = (e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), $("#ask").requestSubmit());
   $("#ask").onsubmit = (e) => {
     e.preventDefault();
-    if (ta.value.trim()) genesis(ta.value.trim());
+    if (ta.value.trim()) genesis(ta.value.trim().slice(0, 400));
   };
 }
 
@@ -196,7 +196,7 @@ function stanceModal(first) {
     <input type="range" id="cv" min="0" max="100" step="5" value="${last?.confidence ?? 30}" />
     <div style="height:10px"></div>
     <label class="small dim">In a sentence — why? (optional)</label>
-    <textarea id="why" maxlength="400" placeholder="${first ? "No wrong answers. This is your 'before' picture." : "What moved you, or what kept you where you were?"}"></textarea>
+    <textarea id="why" placeholder="${first ? "No wrong answers. This is your 'before' picture." : "What moved you, or what kept you where you were?"}"></textarea>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       ${first ? "" : `<button class="btn ghost" id="cancel">Cancel</button>`}
       <button class="btn" id="save">Record it</button>
