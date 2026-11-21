@@ -23,3 +23,9 @@ button.station, button.case { width: 100%; text-align: left; }
 .room { height: calc(100dvh - 130px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
 :focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* typed text: explicit colour so no browser dark-mode or autofill rule can hide it */
+textarea, input, select { color: var(--text); -webkit-text-fill-color: var(--text); caret-color: var(--sun); }
+textarea::placeholder { color: var(--dim); -webkit-text-fill-color: var(--dim); opacity: 0.8; }
+.room { height: calc(var(--vvh, 100dvh) - 130px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); min-height: 320px; }
+textarea { scroll-margin: 90px 0 140px; }

@@ -866,3 +866,21 @@ function playbook() {
   }
   home();
 })();
+
+// ---- on-screen keyboards ----------------------------------------------------------------------
+// Keep the field being typed in above the keyboard: shrink the room to the visible area where the
+// browser reports it, and scroll the focused field into view once the keyboard has opened.
+(() => {
+  const vv = window.visualViewport;
+  const reveal = () => {
+    const el = document.activeElement;
+    if (el?.matches?.("textarea, input:not([type=range])")) el.scrollIntoView({ block: "center", behavior: "smooth" });
+  };
+  const fit = () => {
+    if (vv) document.documentElement.style.setProperty("--vvh", vv.height + "px");
+    reveal();
+  };
+  vv?.addEventListener("resize", fit);
+  if (vv) fit();
+  document.addEventListener("focusin", () => [250, 600].forEach((ms) => setTimeout(reveal, ms)));
+})();

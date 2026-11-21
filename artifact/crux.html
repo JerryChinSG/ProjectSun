@@ -271,6 +271,12 @@ button.station, button.case { width: 100%; text-align: left; }
 :focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
+/* typed text: explicit colour so no browser dark-mode or autofill rule can hide it */
+textarea, input, select { color: var(--text); -webkit-text-fill-color: var(--text); caret-color: var(--sun); }
+textarea::placeholder { color: var(--dim); -webkit-text-fill-color: var(--dim); opacity: 0.8; }
+.room { height: calc(var(--vvh, 100dvh) - 130px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); min-height: 320px; }
+textarea { scroll-margin: 90px 0 140px; }
+
 </style>
 <header class="top">
   <button class="logo" id="home"><span class="sun"></span>CRUX</button>
@@ -1497,6 +1503,24 @@ function playbook() {
     } catch {}
   }
   home();
+})();
+
+// ---- on-screen keyboards ----------------------------------------------------------------------
+// Keep the field being typed in above the keyboard: shrink the room to the visible area where the
+// browser reports it, and scroll the focused field into view once the keyboard has opened.
+(() => {
+  const vv = window.visualViewport;
+  const reveal = () => {
+    const el = document.activeElement;
+    if (el?.matches?.("textarea, input:not([type=range])")) el.scrollIntoView({ block: "center", behavior: "smooth" });
+  };
+  const fit = () => {
+    if (vv) document.documentElement.style.setProperty("--vvh", vv.height + "px");
+    reveal();
+  };
+  vv?.addEventListener("resize", fit);
+  if (vv) fit();
+  document.addEventListener("focusin", () => [250, 600].forEach((ms) => setTimeout(reveal, ms)));
 })();
 
 </script>
