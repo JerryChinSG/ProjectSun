@@ -289,6 +289,7 @@ async function home() {
           <button class="btn" ${sample ? "" : "disabled"}>Open it →</button>
         </div>
       </form>
+      <div class="dim small" id="diag" style="margin-top:8px;height:4.6em;overflow:hidden"></div>
       <div class="examples">${EXAMPLES.map((e) => `<button class="chip" data-ex="${esc(e)}">${esc(e)}</button>`).join("")}</div>
     </section>
     ${
@@ -883,4 +884,21 @@ function playbook() {
   vv?.addEventListener("resize", fit);
   if (vv) fit();
   document.addEventListener("focusin", () => [250, 600].forEach((ms) => setTimeout(reveal, ms)));
+})();
+
+// ---- temporary typing diagnostics (shown under the topic box) -------------------------------------
+(() => {
+  const n = { keydown: 0, beforeinput: 0, input: 0, composition: 0, blur: 0 };
+  const show = () => {
+    const el = document.getElementById("diag");
+    const a = document.activeElement;
+    if (el)
+      el.textContent = `typing check · page focused: ${document.hasFocus() ? "yes" : "NO"} · field: ${a?.id || a?.tagName || "none"} · keys ${n.keydown} · before ${n.beforeinput} · input ${n.input} · compose ${n.composition} · lost focus ${n.blur}× · chars ${a?.value?.length ?? "-"}`;
+  };
+  for (const t of ["keydown", "beforeinput", "input"]) document.addEventListener(t, () => (n[t]++, show()), true);
+  for (const t of ["compositionstart", "compositionupdate"]) document.addEventListener(t, () => (n.composition++, show()), true);
+  window.addEventListener("blur", () => (n.blur++, show()));
+  window.addEventListener("focus", show);
+  document.addEventListener("focusin", show);
+  setInterval(show, 1000);
 })();

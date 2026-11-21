@@ -29,3 +29,4 @@ textarea, input, select { color: var(--text); -webkit-text-fill-color: var(--tex
 textarea::placeholder { color: var(--dim); -webkit-text-fill-color: var(--dim); opacity: 0.8; }
 .room { height: calc(var(--vvh, 100dvh) - 130px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); min-height: 320px; }
 textarea { scroll-margin: 90px 0 140px; }
+textarea, input { -webkit-user-select: text; user-select: text; touch-action: manipulation; }
