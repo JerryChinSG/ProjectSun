@@ -1,4 +1,5 @@
 import { parseTurn } from "/parse.js";
+import { memoryHTML } from "/memory.js";
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $("#app");
@@ -281,6 +282,7 @@ function hub(selConcept) {
       <div class="stat"><b>${litN}/${d.concepts.length}</b>concepts lit</div>
       <div class="stat"><b>${mins}/60</b>min today</div>
       <div class="stat"><b>${C.streak}</b>day streak</div>
+      <div class="stat"><b>${(C.memory || []).filter((m) => m.status === "solid").length}</b>ideas shown</div>
       <div class="stat"><b>${strength}</b>/5 argument strength</div>
     </div>
     <div class="grid">
@@ -295,6 +297,7 @@ function hub(selConcept) {
               : ""
           }
         </div>
+        ${memoryHTML(C)}
         <div class="card"><h3>What it turns on</h3>
           ${d.cruxes
             .map(
@@ -336,6 +339,18 @@ function hub(selConcept) {
     </div>`;
   app.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => hub(b.dataset.k)));
   $("#restance").onclick = () => stanceModal(false);
+  app.querySelectorAll("[data-forget]").forEach(
+    (b) =>
+      (b.onclick = async () => {
+        C = await api(`cases/${C.id}/forget`, { id: b.dataset.forget });
+        hub(selConcept);
+      }),
+  );
+  if ($("#quizdue"))
+    $("#quizdue").onclick = () => {
+      R = { pending: "Quiz me on what's due for review, what I'm shaky on, and what I had wrong." };
+      location.hash = `#/c/${C.id}/learn`;
+    };
   if (k)
     $("#teach").onclick = () => {
       R = { pending: C.lit[k.id] ? `Quiz me on "${k.name}".` : `Teach me "${k.name}".` };
@@ -491,6 +506,8 @@ function room(mode) {
       C = result.case;
       setSpend(result);
       R.fresh = false;
+      for (const ch of result.memoryChanges || [])
+        toast(ch.status === "solid" ? `Added to what you know: ${ch.point}` : ch.status === "shaky" ? `Marked shaky: ${ch.point}` : `Flagged to fix: ${ch.point}`);
       for (const id of result.newlyLit || []) toast(`☀️ Lit: ${C.dossier.concepts.find((k) => k.id === id)?.name}`);
       const said = C.threads.find((x) => x.id === result.threadId).messages.at(-1);
       R.busy = false;

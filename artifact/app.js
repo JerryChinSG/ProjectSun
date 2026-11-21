@@ -237,9 +237,10 @@ async function takeTurn(mode, text, onText) {
     const vals = Object.values(meta.score).map(Number).filter(Number.isFinite);
     if (vals.length) C.scores.push({ at: Date.now(), avg: vals.reduce((a, b) => a + b, 0) / vals.length });
   }
+  const memoryChanges = applyMemory(C, meta?.memory);
   touch(C);
   await saveCase(thread);
-  return { says, newlyLit };
+  return { says, newlyLit, memoryChanges };
 }
 
 async function buildPlaybook() {
@@ -489,6 +490,7 @@ function hub(selConcept) {
       <div class="stat"><b>${litN}/${d.concepts.length}</b>concepts lit</div>
       <div class="stat"><b>${mins}/60</b>min today</div>
       <div class="stat"><b>${streak(C.days)}</b>day streak</div>
+      <div class="stat"><b>${(C.memory || []).filter((m) => m.status === "solid").length}</b>ideas shown</div>
       <div class="stat"><b>${strength}</b>/5 argument strength</div>
     </div>
     <div class="grid">
@@ -503,6 +505,7 @@ function hub(selConcept) {
               : ""
           }
         </div>
+        ${memoryHTML(C)}
         <div class="card"><h3>What it turns on</h3>
           ${d.cruxes.map((x) => `<div class="crux"><b>${esc(x.question)}</b><span class="tag">${esc(x.kind)}</span>
               <div class="yn"><div>If yes → ${esc(x.if_yes)}</div><div>If no → ${esc(x.if_no)}</div></div></div>`).join("")}
@@ -535,6 +538,19 @@ function hub(selConcept) {
   app.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => hub(b.dataset.k)));
   app.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => (b.dataset.go === "playbook" ? playbook() : room(b.dataset.go))));
   $("#restance").onclick = () => stanceModal(false, () => hub(selConcept));
+  app.querySelectorAll("[data-forget]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        C.memory = C.memory.filter((m) => m.id !== b.dataset.forget);
+        hub(selConcept);
+        saveCase().catch(() => toast("Couldn't save that change.", true));
+      }),
+  );
+  if ($("#quizdue"))
+    $("#quizdue").onclick = () => {
+      R = { pending: "Quiz me on what's due for review, what I'm shaky on, and what I had wrong." };
+      room("learn");
+    };
   if (k)
     $("#teach").onclick = () => {
       R = { pending: C.lit[k.id] ? `Quiz me on "${k.name}".` : `Teach me "${k.name}".` };
@@ -665,7 +681,7 @@ function room(mode) {
     say.style.height = "";
     const fallback = mode === "learn" ? "sol" : mode === "hotseat" ? "vex" : mode === "chair" ? "narrator" : d.cast[0].id;
     try {
-      const { says, newlyLit } = await takeTurn(mode, text, ({ text: whole }) => {
+      const { says, newlyLit, memoryChanges } = await takeTurn(mode, text, ({ text: whole }) => {
         const parsed = parseTurn(whole, fallback).says;
         if (parsed.length) live.innerHTML = parsed.map(sayHTML).join("");
         app.querySelectorAll(".seat").forEach((s) => s.classList.toggle("speaking", parsed.at(-1)?.who === s.dataset.seat));
@@ -673,6 +689,8 @@ function room(mode) {
       });
       R.fresh = false;
       R.busy = false;
+      for (const ch of memoryChanges)
+        toast(ch.status === "solid" ? `Added to what you know: ${ch.point}` : ch.status === "shaky" ? `Marked shaky: ${ch.point}` : `Flagged to fix: ${ch.point}`);
       for (const id of newlyLit) toast(`☀️ Lit: ${d.concepts.find((k) => k.id === id)?.name}`);
       if (!$("#log") || R.mode !== mode) return; // navigated away mid-reply
       const draft = $("#say").value;

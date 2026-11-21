@@ -29,6 +29,7 @@ ${read("artifact/extra.css")}
 <div id="toasts"></div>
 <script type="module">
 ${strip(read("public/parse.js"))}
+${strip(read("public/memory.js"))}
 ${strip(read("lib/prompts.js"))}
 ${read("artifact/app.js")}
 </script>

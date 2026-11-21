@@ -14,6 +14,7 @@ const { getCase, saveCase, deleteCase, listCases, setMeta } = await import("./li
 const ai = await import("./lib/ai.js");
 const P = await import("./lib/prompts.js");
 const { parseTurn } = await import("./public/parse.js");
+const { applyMemory } = await import("./public/memory.js");
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "127.0.0.1";
@@ -206,9 +207,10 @@ async function turn(req, res, c) {
       const vals = Object.values(meta.score).map(Number).filter(Number.isFinite);
       if (vals.length) c.scores.push({ at: Date.now(), avg: vals.reduce((a, b) => a + b, 0) / vals.length });
     }
+    const memoryChanges = applyMemory(c, meta?.memory);
     touch(c);
     saveCase(c);
-    send({ type: "done", case: view(c), threadId: thread.id, newlyLit, ...ai.spendInfo() });
+    send({ type: "done", case: view(c), threadId: thread.id, newlyLit, memoryChanges, ...ai.spendInfo() });
   } catch (err) {
     if (!(err instanceof ai.FriendlyError)) console.error(err);
     send({ type: "error", error: err instanceof ai.FriendlyError ? err.message : "That turn failed. Try sending it again." });
@@ -248,6 +250,12 @@ async function api(req, res, url) {
         why: String(why || "").slice(0, 400),
       });
       c.touchedAt ||= Date.now();
+      saveCase(c);
+      return json(res, 200, view(c));
+    }
+    if (b === "forget" && req.method === "POST") {
+      const { id: entry } = await readBody(req);
+      c.memory = (c.memory || []).filter((m) => m.id !== entry);
       saveCase(c);
       return json(res, 200, view(c));
     }

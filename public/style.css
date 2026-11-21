@@ -224,3 +224,19 @@ input[type="range"] { width: 100%; accent-color: var(--sun); }
   .score { margin-left: 0; max-width: 100%; }
   .ask { flex-direction: column; }
 }
+
+/* knowledge ledger */
+.mem-group { margin-top: 10px; }
+.mem-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; color: var(--dim); }
+.mem-title span { opacity: 0.7; }
+.mem-group.ok .mem-title { color: var(--good); }
+.mem-group.mid .mem-title { color: var(--sun); }
+.mem-group.bad .mem-title { color: var(--bad); }
+.mem { display: flex; gap: 10px; justify-content: space-between; align-items: flex-start; padding: 8px 0 8px 10px; border-left: 2px solid var(--line); margin-top: 6px; font-size: 0.9rem; }
+.mem > div { min-width: 0; }
+.mem b { font-weight: 500; }
+.mem-group.ok .mem { border-color: var(--good); }
+.mem-group.mid .mem { border-color: var(--sun); }
+.mem-group.bad .mem { border-color: var(--bad); }
+.mem .del { background: none; border: 0; color: var(--dim); flex: none; }
+.mem .del:hover { color: var(--bad); }
