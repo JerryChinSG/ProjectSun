@@ -146,7 +146,13 @@ async function home() {
         home();
       }),
   );
-  ta.onkeydown = (e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), $("#ask").requestSubmit());
+  // Block body on purpose: an on-event handler that returns false cancels the key press.
+  ta.onkeydown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      $("#ask").requestSubmit();
+    }
+  };
   $("#ask").onsubmit = (e) => {
     e.preventDefault();
     if (ta.value.trim()) genesis(ta.value.trim().slice(0, 400));
