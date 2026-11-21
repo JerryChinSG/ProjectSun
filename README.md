@@ -45,3 +45,9 @@ Pick the model in the header. Opus 5.5 is the default. Sonnet 5.5 costs about ha
 ## Hosting it
 
 It binds to `127.0.0.1` by default. If you put it on a server, set `HOST=0.0.0.0` and `APP_PASSWORD`, otherwise anyone with the URL can spend your credit.
+
+## Claude-hosted edition
+
+`artifact/` holds a single-page version that runs as a private Claude artifact, so it is always available with nothing to run. `node artifact/build.mjs` rebuilds `artifact/crux.html` from the same prompts.
+
+It differs from the local server in three ways: replies use your Claude plan's usage, not API credit; it cannot search the web, so recent material has to be pasted in when you open a topic; and your topics are stored in the artifact's private per-person database.
