@@ -174,19 +174,40 @@ async function turn(req, res, c) {
   const api = `${P.stateNote(c, thread)}\n\n${kickoff ? M.kickoff(thread.opts) : said}`;
 
   try {
-    const { text: raw } = await ai.run({
-      system: [
-        { type: "text", text: P.dossierBlock(c), cache_control: { type: "ephemeral" } },
-        { type: "text", text: M.rules(thread.opts, c) },
-      ],
-      messages: [...thread.messages.map((m) => ({ role: m.role, content: m.api })), { role: "user", content: api }],
-      effort: M.effort,
-      onText: (delta) => send({ type: "delta", text: delta }),
-      mock: mode,
-    });
+    let raw = "";
+    let sources = [];
+    const attempt = async (live) => {
+      const messages = [...thread.messages.map((m) => ({ role: m.role, content: m.api })), { role: "user", content: api }];
+      for (let i = 0; i < 4; i++) {
+        const { text, msg } = await ai.run({
+          system: [
+            { type: "text", text: P.dossierBlock(c), cache_control: { type: "ephemeral" } },
+            { type: "text", text: M.rules(thread.opts, c, live) },
+          ],
+          messages,
+          effort: M.effort,
+          tools: live ? [{ type: "web_search_20260209", name: "web_search", max_uses: 3 }] : undefined,
+          onText: (delta) => send({ type: "delta", text: delta }),
+          onEvent: live ? ai.searchWatcher((q) => send({ type: "search", text: q })) : undefined,
+          mock: mode,
+        });
+        raw += text;
+        sources = [...sources, ...ai.citedSources(msg)];
+        if (msg.stop_reason !== "pause_turn") break;
+        messages.push({ role: "assistant", content: msg.content }); // server resumes the paused search turn
+      }
+    };
+    const live = !!M.search && !ai.isMock();
+    try {
+      await attempt(live);
+    } catch (err) {
+      // Web search not enabled for this organisation: answer from the dossier instead.
+      if (!(live && !raw && err instanceof ai.FriendlyError && /error \(400\)/.test(err.message))) throw err;
+      await attempt(false);
+    }
     const { says, meta } = parseTurn(raw, M.speaker || c.dossier.cast[0].id);
     thread.messages.push({ role: "user", api, text: kickoff ? null : text?.trim() || null, at: Date.now() });
-    thread.messages.push({ role: "assistant", api: raw, says, meta, at: Date.now() });
+    thread.messages.push({ role: "assistant", api: raw, says, meta, sources: sources.length ? sources : undefined, at: Date.now() });
     if (isNew) c.threads.push(thread);
 
     const known = new Set(c.dossier.concepts.map((k) => k.id));

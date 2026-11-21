@@ -240,3 +240,5 @@ input[type="range"] { width: 100%; accent-color: var(--sun); }
 .mem-group.bad .mem { border-color: var(--bad); }
 .mem .del { background: none; border: 0; color: var(--dim); flex: none; }
 .mem .del:hover { color: var(--bad); }
+.sources { margin-left: 44px; font-size: 0.78rem; color: var(--dim); max-width: 92%; overflow-wrap: anywhere; }
+.sources a { color: var(--sun); text-decoration: underline; text-underline-offset: 2px; }

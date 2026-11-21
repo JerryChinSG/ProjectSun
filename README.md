@@ -21,6 +21,7 @@ To click around without spending anything: `npm run mock` (canned replies, no AP
 | Room | What happens |
 | --- | --- |
 | **The Guide** | Sol teaches the concept map by asking questions. A concept only lights up when you explain or apply it in your own words. Each session opens with recall of what you lit before. |
+| **The Teacher** | Ada answers whatever you ask, directly and from facts, and says how settled each point is. In the server version she can search the web on each question and lists the pages she cited. |
 | **The Table** | Four invented experts who genuinely disagree are mid-argument. Jump in, address one with `@name`, or stay quiet and let them go at each other. They concede when you land a point and correct you when you're wrong. |
 | **The Hot Seat** | Vex cross-examines you. Every answer is scored on clarity, evidence, logic and rebuttal, and rewritten as a stronger version you could say out loud. You can argue the side you reject, graded on whether a believer would nod along. |
 | **The Chair** | A decision scenario built for the topic. You make six calls, gauges move, and consequences arrive. |

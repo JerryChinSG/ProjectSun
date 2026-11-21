@@ -23,6 +23,7 @@ let ctl = null; // AbortController of the reply in flight
 
 const MODES = {
   learn: { glyph: "G", name: "The Guide", min: 20, blurb: "Sol teaches the concept map by asking, not telling. Explain an idea in your own words and it lights up." },
+  teach: { glyph: "A", name: "The Teacher", min: 10, blurb: "Ask anything and get a straight, fact-based answer that says how settled each point is." },
   table: { glyph: "T", name: "The Table", min: 15, blurb: "Four people who disagree are mid-argument. Pull up a chair, take sides, get pushed." },
   hotseat: { glyph: "H", name: "The Hot Seat", min: 15, blurb: "Vex cross-examines you. Every answer is scored and rewritten stronger. Try defending the side you reject." },
   chair: { glyph: "C", name: "The Chair", min: 10, blurb: "You're the one deciding. Make six calls and live with what follows." },
@@ -30,8 +31,10 @@ const MODES = {
 const FIXED = {
   sol: { name: "Sol", role: "your guide", emoji: "☀️", color: "#ffb84d", voice: "buttery" },
   vex: { name: "Vex", role: "cross-examiner", emoji: "⚔️", color: "#ff5c7a", voice: "glassy" },
+  ada: { name: "Ada", role: "your teacher", emoji: "📚", color: "#7fd1c7", voice: "airy" },
   narrator: { name: "Narrator", role: "", emoji: "📖", color: "#9aa7c7", voice: "rounded" },
 };
+const SOLO = { learn: "sol", teach: "ada", hotseat: "vex", chair: "narrator" };
 const CAST_COLORS = ["#ff8a5c", "#5cc8ff", "#b08cff", "#6fdc8c"];
 const CAST_VOICES = ["airy", "glassy", "rounded", "buttery"];
 
@@ -429,6 +432,34 @@ function stanceModal(first, after) {
   };
 }
 
+function sourceModal(after) {
+  const el = document.createElement("div");
+  el.className = "modal";
+  el.innerHTML = `<div class="card">
+    <div class="eyebrow">Keep this topic up to date</div>
+    <h2>Add source material</h2>
+    <p class="dim small" style="margin-top:0">Paste an article, a report or your own notes. Every room, and the Teacher in particular, will use it from your next message. Paste the text itself; links can't be opened from here.</p>
+    <textarea id="src" style="min-height:160px" placeholder="Paste text here…"></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" id="cancel">Cancel</button><button class="btn" id="save">Add it</button></div></div>`;
+  document.body.append(el);
+  $("#cancel", el).onclick = () => el.remove();
+  $("#save", el).onclick = async () => {
+    const text = $("#src", el).value.trim();
+    el.remove();
+    if (!text) return;
+    // newest first; keep the total small enough to send with every message
+    C.notes = `[added ${today()}]\n${text}\n\n${C.notes || ""}`.slice(0, 60000);
+    C.notesLabel = "SOURCE MATERIAL THE LEARNER PASTED";
+    after();
+    toast("Added. The rooms will use it from your next message.");
+    try {
+      await saveCase();
+    } catch {
+      toast("Couldn't save that. Check your connection.", true);
+    }
+  };
+}
+
 // ---- hub ------------------------------------------------------------------------------------
 
 function mapHTML(sel) {
@@ -519,6 +550,7 @@ function hub(selConcept) {
               <div class="yn"><div>If yes → ${esc(x.if_yes)}</div><div>If no → ${esc(x.if_no)}</div></div></div>`).join("")}
         </div>
         <div class="card">
+          <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px"><span class="dim small">${C.notes ? `Source material on file: ${Math.round(C.notes.length / 5)} words or so.` : "This page can't browse the web."}</span><button class="btn ghost sm" id="addsrc">Add source material</button></div>
           <details><summary>Facts to have at your fingertips</summary><ul>${d.facts.map((f) => `<li>${esc(f.text)} <span class="dim">(${esc(f.source)})</span></li>`).join("")}</ul>
           <p class="dim small">Written from Claude's own knowledge${C.notes ? " and the material you pasted" : ""}, not a live search. Check anything recent before you rely on it.</p></details>
           <details style="margin-top:10px"><summary>What newcomers get wrong</summary><ul>${d.misconceptions.map((m) => `<li>${esc(m)}</li>`).join("")}</ul></details>
@@ -546,6 +578,7 @@ function hub(selConcept) {
   app.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => hub(b.dataset.k)));
   app.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => (b.dataset.go === "playbook" ? playbook() : room(b.dataset.go))));
   $("#restance").onclick = () => stanceModal(false, () => hub(selConcept));
+  $("#addsrc").onclick = () => sourceModal(() => hub(selConcept));
   app.querySelectorAll("[data-forget]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -636,7 +669,7 @@ function room(mode) {
     <div class="composer" ${needsStart ? "hidden" : ""}>
       <div id="quick"></div>
       <div class="inrow">
-        <textarea id="say" rows="1" placeholder="${mode === "table" ? "Jump in… (tap a seat to address someone)" : "Say it in your own words…"}"></textarea>
+        <textarea id="say" rows="1" placeholder="${mode === "table" ? "Jump in… (tap a seat to address someone)" : mode === "teach" ? "Ask anything…" : "Say it in your own words…"}"></textarea>
         ${dictation ? `<button class="icon" id="mic" title="Speak your answer" aria-label="Speak your answer">🎙️</button>` : ""}
         ${mode === "table" ? `<button class="btn ghost" id="pass" title="Stay quiet and let them argue">Let them argue</button>` : ""}
         <button class="btn" id="send">Send</button>
@@ -680,14 +713,14 @@ function room(mode) {
     if (!kickoff && text) log.insertAdjacentHTML("beforeend", meHTML(text));
     const live = document.createElement("div");
     live.style.cssText = "display:grid;gap:12px";
-    const waiting = mode === "table" ? "The table reacts" : mode === "chair" ? "Events unfold" : speaker(mode === "learn" ? "sol" : "vex").name + " is thinking";
+    const waiting = mode === "table" ? "The table reacts" : mode === "chair" ? "Events unfold" : speaker(SOLO[mode]).name + " is thinking";
     live.innerHTML = `<div class="typing">${waiting}</div><div style="padding-left:44px"><button class="link" id="stop">Stop</button></div>`;
     log.append(live);
     $("#stop", live).onclick = () => ctl?.abort();
     scroll();
     say.value = "";
     say.style.height = "";
-    const fallback = mode === "learn" ? "sol" : mode === "hotseat" ? "vex" : mode === "chair" ? "narrator" : d.cast[0].id;
+    const fallback = SOLO[mode] || d.cast[0].id;
     try {
       const { says, newlyLit, memoryChanges } = await takeTurn(mode, text, ({ text: whole }) => {
         const parsed = parseTurn(whole, fallback).says;

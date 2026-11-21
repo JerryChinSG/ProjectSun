@@ -12,6 +12,7 @@ let R = {}; // current room state
 
 const MODES = {
   learn: { ico: "☀️", name: "The Guide", min: 20, blurb: "Sol teaches the concept map by asking, not telling. Explain an idea in your own words and it lights up." },
+  teach: { ico: "📚", name: "The Teacher", min: 10, blurb: "Ask anything and get a straight, fact-based answer, with live web sources and how settled each point is." },
   table: { ico: "🍷", name: "The Table", min: 15, blurb: "Four people who disagree are mid-argument. Pull up a chair, take sides, get pushed." },
   hotseat: { ico: "🔥", name: "The Hot Seat", min: 15, blurb: "Vex cross-examines you. Every answer is scored and rewritten stronger. Try defending the side you reject." },
   chair: { ico: "🪑", name: "The Chair", min: 10, blurb: "You're the one deciding. Make six calls and live with what follows." },
@@ -19,8 +20,10 @@ const MODES = {
 const FIXED = {
   sol: { name: "Sol", role: "your guide", emoji: "☀️", color: "#ffb84d" },
   vex: { name: "Vex", role: "cross-examiner", emoji: "⚔️", color: "#ff5c7a" },
+  ada: { name: "Ada", role: "your teacher", emoji: "📚", color: "#7fd1c7" },
   narrator: { name: "Narrator", role: "", emoji: "📖", color: "#9aa7c7" },
 };
+const SOLO = { learn: "sol", teach: "ada", hotseat: "vex", chair: "narrator" };
 const CAST_COLORS = ["#ff8a5c", "#5cc8ff", "#b08cff", "#6fdc8c"];
 
 function speaker(who) {
@@ -384,6 +387,10 @@ const sayHTML = (s) => {
   return `<div class="msg them" style="--c:${p.color}"><div class="av">${esc(p.emoji)}</div><div class="bub">
     <div class="who">${esc(p.name)}${p.role ? ` <span>· ${esc(p.role)}</span>` : ""}</div><div class="txt">${md(s.text)}</div></div></div>`;
 };
+const sourcesHTML = (list) =>
+  list?.length
+    ? `<div class="sources">Sources: ${list.filter((s) => /^https?:\/\//.test(s.url)).map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title)}</a>`).join(" · ")}</div>`
+    : "";
 const meHTML = (text) => `<div class="msg me"><div class="bub"><div class="txt">${esc(text)}</div></div></div>`;
 
 function threadFor(mode) {
@@ -440,13 +447,13 @@ function room(mode) {
       needsStart
         ? startHTML
         : (t?.messages || [])
-            .map((m) => (m.role === "user" ? (m.text ? meHTML(m.text) : "") : scoreHTML(m.meta) + (m.says || []).map(sayHTML).join("")))
+            .map((m) => (m.role === "user" ? (m.text ? meHTML(m.text) : "") : scoreHTML(m.meta) + (m.says || []).map(sayHTML).join("") + sourcesHTML(m.sources)))
             .join("")
     }</div>
     <div class="composer" ${needsStart ? "hidden" : ""}>
       <div id="quick"></div>
       <div class="inrow">
-        <textarea id="say" rows="1" placeholder="${mode === "table" ? "Jump in… (tap a seat to address someone)" : "Say it in your own words…"}"></textarea>
+        <textarea id="say" rows="1" placeholder="${mode === "table" ? "Jump in… (tap a seat to address someone)" : mode === "teach" ? "Ask anything…" : "Say it in your own words…"}"></textarea>
         <button class="icon" id="mic" title="Speak your answer">🎙️</button>
         ${mode === "table" ? `<button class="btn ghost" id="pass" title="Stay quiet and let them argue">Let them argue</button>` : ""}
         <button class="btn" id="send">Send</button>
@@ -489,7 +496,7 @@ function room(mode) {
     const live = document.createElement("div");
     live.style.display = "grid";
     live.style.gap = "12px";
-    live.innerHTML = `<div class="typing">${mode === "table" ? "The table reacts" : mode === "chair" ? "Events unfold" : speaker(mode === "learn" ? "sol" : "vex").name + " is thinking"}</div>`;
+    live.innerHTML = `<div class="typing">${mode === "table" ? "The table reacts" : mode === "chair" ? "Events unfold" : speaker(SOLO[mode]).name + " is thinking"}</div>`;
     log.append(live);
     scroll();
     say.value = "";
@@ -501,11 +508,12 @@ function room(mode) {
       await stream(`cases/${C.id}/turn`, { mode, threadId: threadFor(mode)?.id, text, opts: R.opts || {} }, (e) => {
         if (e.type === "delta") {
           buf += e.text;
-          const { says } = parseTurn(buf, mode === "learn" ? "sol" : mode === "hotseat" ? "vex" : mode === "chair" ? "narrator" : C.dossier.cast[0].id);
+          const { says } = parseTurn(buf, SOLO[mode] || C.dossier.cast[0].id);
           if (says.length) live.innerHTML = says.map(sayHTML).join("");
           app.querySelectorAll(".seat").forEach((s) => s.classList.toggle("speaking", says.at(-1)?.who === s.dataset.seat));
           scroll();
-        } else if (e.type === "error") failed = e.error;
+        } else if (e.type === "search" && !buf) live.innerHTML = `<div class="typing">Searching the web: ${esc(e.text)}</div>`;
+        else if (e.type === "error") failed = e.error;
         else if (e.type === "done") result = e;
       });
       if (failed || !result) throw new Error(failed || "The connection dropped. Try again.");
