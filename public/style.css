@@ -242,3 +242,7 @@ input[type="range"] { width: 100%; accent-color: var(--sun); }
 .mem .del:hover { color: var(--bad); }
 .sources { margin-left: 44px; font-size: 0.78rem; color: var(--dim); max-width: 92%; overflow-wrap: anywhere; }
 .sources a { color: var(--sun); text-decoration: underline; text-underline-offset: 2px; }
+.icon.busy { border-color: var(--sun); opacity: 0.7; }
+.icon.on { animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(255, 107, 129, 0.25); } }
+.btn.ghost.active { border-color: var(--sun); color: var(--sun); }

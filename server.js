@@ -10,9 +10,10 @@ try {
   process.loadEnvFile(path.join(root, ".env"));
 } catch {}
 
-const { getCase, saveCase, deleteCase, listCases, setMeta } = await import("./lib/store.js");
+const { getCase, saveCase, deleteCase, listCases, setMeta, getMeta } = await import("./lib/store.js");
 const ai = await import("./lib/ai.js");
 const P = await import("./lib/prompts.js");
+const voice = await import("./lib/voice.js");
 const { parseTurn } = await import("./public/parse.js");
 const { applyMemory } = await import("./public/memory.js");
 
@@ -93,6 +94,19 @@ const readBody = (req) =>
     req.on("error", reject);
   });
 
+const readRaw = (req, limit) =>
+  new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (c) => {
+      size += c.length;
+      if (size > limit) return req.destroy();
+      chunks.push(c);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+
 const json = (res, code, body) => {
   res.writeHead(code, { "content-type": "application/json" });
   res.end(JSON.stringify(body));
@@ -109,6 +123,8 @@ const stateInfo = () => ({
   model: ai.currentModel(),
   models: Object.entries(ai.MODELS).map(([id, m]) => ({ id, label: m.label, note: m.note })),
   hasKey: ai.hasKey(),
+  voice: voice.hasVoice(),
+  voiceChars: getMeta().voiceChars || 0,
   mock: ai.isMock(),
 });
 
@@ -244,6 +260,26 @@ async function api(req, res, url) {
   const [a, id, b] = parts;
 
   if (a === "state" && req.method === "GET") return json(res, 200, stateInfo());
+  if ((a === "tts" || a === "stt") && req.method === "POST") {
+    if (!voice.hasVoice()) return json(res, 503, { error: "No ElevenLabs key configured." });
+    try {
+      if (a === "tts") {
+        const { text, slot } = await readBody(req);
+        const clean = String(text || "").slice(0, 1500);
+        if (!clean.trim()) return json(res, 400, { error: "Nothing to say." });
+        const audio = await voice.tts(clean, Number(slot) || 0);
+        res.writeHead(200, { "content-type": "audio/mpeg", "cache-control": "no-store" });
+        return res.end(audio);
+      }
+      const audio = await readRaw(req, 12e6);
+      if (audio.length < 800) return json(res, 200, { text: "" });
+      return json(res, 200, { text: await voice.stt(audio, req.headers["content-type"]) });
+    } catch (err) {
+      const quota = err.status === 401 || err.status === 402 || err.status === 429;
+      if (!(err instanceof voice.VoiceError)) console.error(err);
+      return json(res, quota ? 402 : 502, { error: err instanceof voice.VoiceError ? `ElevenLabs: ${err.message}` : "Voice service failed." });
+    }
+  }
   if (a === "settings" && req.method === "POST") {
     const { model } = await readBody(req);
     if (!ai.MODELS[model]) return json(res, 400, { error: "Unknown model." });

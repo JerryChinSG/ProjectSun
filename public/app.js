@@ -405,7 +405,8 @@ function room(mode) {
   const t = threadFor(mode);
   const lastMeta = t?.messages.at(-1)?.meta || {};
   const d = C.dossier;
-  const tts = localStorage.getItem("crux-tts") === "1";
+  const tts = voiceOn();
+  const talk = talkOn();
 
   let chrome = "";
   if (mode === "table")
@@ -439,7 +440,8 @@ function room(mode) {
     <div class="room-head">
       <a class="back" href="#/c/${C.id}">← ${esc(d.title)}</a>
       <h2>${M.ico} ${M.name}${t?.opts?.side ? ` <span class="dim small" style="font-family:var(--sans)">· arguing ${t.opts.side}${t.opts.flip ? " (flip)" : ""}</span>` : ""}</h2>
-      <button class="btn ghost sm" id="tts" title="Read replies aloud">${tts ? "🔊 Voice on" : "🔈 Voice off"}</button>
+      ${canHear() ? `<button class="btn ghost sm${talk ? " active" : ""}" id="talk" title="Hands-free: replies are spoken, then the microphone opens for your answer">${talk ? "🗣️ Conversation on" : "🗣️ Conversation off"}</button>` : ""}
+      <button class="btn ghost sm" id="tts" title="Read replies aloud${G?.voice ? " (ElevenLabs)" : ""}" ${talk ? "disabled" : ""}>${tts || talk ? "🔊 Voice on" : "🔈 Voice off"}</button>
       ${t ? `<button class="btn ghost sm" id="fresh">New round</button>` : ""}
     </div>
     <div>${chrome}</div>
@@ -454,7 +456,7 @@ function room(mode) {
       <div id="quick"></div>
       <div class="inrow">
         <textarea id="say" rows="1" placeholder="${mode === "table" ? "Jump in… (tap a seat to address someone)" : mode === "teach" ? "Ask anything…" : "Say it in your own words…"}"></textarea>
-        <button class="icon" id="mic" title="Speak your answer">🎙️</button>
+        ${canHear() ? `<button class="icon" id="mic" title="Speak your answer">🎙️</button>` : ""}
         ${mode === "table" ? `<button class="btn ghost" id="pass" title="Stay quiet and let them argue">Let them argue</button>` : ""}
         <button class="btn" id="send">Send</button>
       </div>
@@ -490,7 +492,8 @@ function room(mode) {
   async function send(text, kickoff) {
     if (R.busy) return;
     R.busy = true;
-    speechSynthesis?.cancel();
+    stopSpeaking();
+    stopHearing();
     $("#quick").innerHTML = "";
     if (!kickoff && text) log.insertAdjacentHTML("beforeend", meHTML(text));
     const live = document.createElement("div");
@@ -529,7 +532,7 @@ function room(mode) {
       const draft = say.value;
       room(mode);
       $("#say").value = draft;
-      if (localStorage.getItem("crux-tts") === "1") speak(said.says || []);
+      if (voiceOn() || talkOn()) speak(said.says || []).then((finished) => finished && takeTurnByVoice(mode));
       return;
     } catch (err) {
       live.remove();
@@ -564,7 +567,7 @@ function room(mode) {
     };
   $("#tts").onclick = () => {
     localStorage.setItem("crux-tts", tts ? "0" : "1");
-    speechSynthesis?.cancel();
+    stopSpeaking();
     const draft = say.value;
     room(mode);
     $("#say").value = draft;
@@ -585,52 +588,214 @@ function room(mode) {
         room(mode);
       }),
   );
-  setupMic($("#mic"), say);
+  R.send = send;
+  if ($("#mic"))
+    $("#mic").onclick = async () => {
+      if (hearing) return hearing.stop(talkOn()); // conversation mode: tap cancels; otherwise tap finishes
+      stopSpeaking();
+      const text = await hear({ auto: talkOn() });
+      if (talkOn() && text && !R.busy) send(text);
+    };
+  if ($("#talk"))
+    $("#talk").onclick = () => {
+      localStorage.setItem("crux-talk", talk ? "0" : "1");
+      stopSpeaking();
+      stopHearing();
+      const draft = say.value;
+      room(mode);
+      $("#say").value = draft;
+      if (!talk) toast("Conversation mode on. Replies are spoken, then the mic opens. Tap the mic to interrupt.");
+    };
 
   if (!needsStart && !t) send(null, true).then(() => pending && send(pending));
   else if (pending && !needsStart) send(pending);
 }
 
 // ---- voice ----------------------------------------------------------------------------------
+// Speaking: ElevenLabs through the server when a key is configured, otherwise the browser's own voice.
+// Listening: the browser's built-in recognition when it has one (free, shows words live), otherwise a
+// recording sent to the server for transcription.
 
-function speak(says) {
-  if (!window.speechSynthesis) return;
-  const voices = speechSynthesis.getVoices().filter((v) => v.lang.startsWith("en"));
-  const names = [...new Set(says.map((s) => s.who))];
-  for (const s of says) {
-    const u = new SpeechSynthesisUtterance(s.text.replace(/\*/g, ""));
-    if (voices.length) u.voice = voices[(names.indexOf(s.who) * 3 + s.who.length) % voices.length];
-    u.rate = 1.05;
-    speechSynthesis.speak(u);
-  }
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const canRecord = () => !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+const canHear = () => !!SR || (!!G?.voice && canRecord());
+const voiceOn = () => localStorage.getItem("crux-tts") === "1";
+const talkOn = () => localStorage.getItem("crux-talk") === "1" && canHear();
+
+let speakToken = 0;
+let currentAudio = null;
+let cloudVoiceDown = false;
+
+function stopSpeaking() {
+  speakToken++;
+  currentAudio?.pause();
+  currentAudio = null;
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
 }
 
-function setupMic(btn, target) {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    btn.hidden = true;
-    return;
+const slotOf = (who) => {
+  const fixed = Object.keys(FIXED).indexOf(who);
+  if (fixed >= 0) return fixed;
+  const i = C.dossier.cast.findIndex((p) => p.id === who);
+  return Object.keys(FIXED).length + Math.max(0, i);
+};
+
+/** Read a reply aloud. Resolves true if it played to the end, false if interrupted. */
+async function speak(says) {
+  stopSpeaking();
+  const token = speakToken;
+  const lines = says.map((s) => ({ who: s.who, text: s.text.replace(/\*/g, "") })).filter((s) => s.text.trim());
+  if (G?.voice && !cloudVoiceDown) {
+    // Request every line at once, play them in order.
+    const clips = lines.map((l) =>
+      fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: l.text, slot: slotOf(l.who) }) }).then(async (r) => {
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "Voice service failed.");
+        return r.blob();
+      }),
+    );
+    clips.forEach((c) => c.catch(() => {}));
+    try {
+      for (const clip of clips) {
+        const blob = await clip;
+        if (token !== speakToken) return false;
+        await new Promise((done) => {
+          const audio = (currentAudio = new Audio(URL.createObjectURL(blob)));
+          audio.onended = audio.onerror = audio.onpause = done;
+          audio.play().catch(done);
+        });
+        if (token !== speakToken) return false;
+      }
+      return true;
+    } catch (err) {
+      cloudVoiceDown = true;
+      toast(`${err.message} Switching to the browser's voice for now.`, true);
+    }
   }
-  let rec = null;
-  btn.onclick = () => {
-    if (rec) return rec.stop();
-    const base = target.value ? target.value.trimEnd() + " " : "";
-    rec = new SR();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = "en-US";
-    rec.onresult = (e) => {
-      target.value = base + [...e.results].map((r) => r[0].transcript).join("");
-      target.oninput?.();
-    };
-    rec.onend = () => {
-      rec = null;
-      btn.classList.remove("on");
-    };
-    rec.onerror = (e) => e.error !== "aborted" && e.error !== "no-speech" && toast("Microphone: " + e.error, true);
-    rec.start();
-    btn.classList.add("on");
+  if (!window.speechSynthesis || !lines.length) return true;
+  const voices = speechSynthesis.getVoices().filter((v) => v.lang.startsWith("en"));
+  return new Promise((resolve) => {
+    lines.forEach((l, i) => {
+      const u = new SpeechSynthesisUtterance(l.text);
+      if (voices.length) u.voice = voices[(slotOf(l.who) * 3) % voices.length];
+      u.rate = 1.05;
+      if (i === lines.length - 1) u.onend = u.onerror = () => resolve(token === speakToken);
+      speechSynthesis.speak(u);
+    });
+  });
+}
+
+let hearing = null; // { stop(cancel) } while the microphone is open
+const stopHearing = () => hearing?.stop(true);
+
+/**
+ * Listen for one utterance and put it in the reply box. With `auto`, it ends by itself when you
+ * stop talking. Resolves the text, or null if cancelled or nothing was said.
+ */
+function hear({ auto }) {
+  stopHearing();
+  const box = $("#say");
+  if (!box || !$("#mic")) return Promise.resolve(null);
+  const base = box.value ? box.value.trimEnd() + " " : "";
+  const show = (t) => {
+    const el = $("#say");
+    if (!el) return;
+    el.value = base + t;
+    el.oninput?.();
   };
+  const lamp = (cls) => {
+    const b = $("#mic");
+    if (b) b.className = "icon" + (cls ? " " + cls : "");
+  };
+  lamp("on");
+
+  if (SR)
+    return new Promise((resolve) => {
+      const rec = new SR();
+      let text = "";
+      let cancelled = false;
+      rec.continuous = !auto;
+      rec.interimResults = true;
+      rec.lang = "en-US";
+      rec.onresult = (e) => {
+        text = [...e.results].map((r) => r[0].transcript).join("");
+        show(text);
+      };
+      rec.onerror = (e) => !["aborted", "no-speech"].includes(e.error) && toast("Microphone: " + e.error, true);
+      rec.onend = () => {
+        hearing = null;
+        lamp("");
+        resolve(cancelled ? null : text.trim() || null);
+      };
+      hearing = { stop: (cancel) => ((cancelled = cancel), rec.stop()) };
+      rec.start();
+    });
+
+  return (async () => {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      lamp("");
+      toast("The microphone was blocked. Allow it for this site and try again.", true);
+      return null;
+    }
+    const recorder = new MediaRecorder(stream);
+    const chunks = [];
+    let cancelled = false;
+    recorder.ondataavailable = (e) => chunks.push(e.data);
+    const stopped = new Promise((r) => (recorder.onstop = r));
+    const stop = () => recorder.state === "recording" && recorder.stop();
+    // Watch the volume so a pause after speaking ends the turn.
+    const ctx = new AudioContext();
+    const analyser = ctx.createAnalyser();
+    ctx.createMediaStreamSource(stream).connect(analyser);
+    const wave = new Uint8Array(analyser.fftSize);
+    const t0 = performance.now();
+    let spoke = false;
+    let lastLoud = t0;
+    const watch = setInterval(() => {
+      analyser.getByteTimeDomainData(wave);
+      let sum = 0;
+      for (const v of wave) sum += (v - 128) ** 2;
+      const now = performance.now();
+      if (Math.sqrt(sum / wave.length) > 6) {
+        spoke = true;
+        lastLoud = now;
+      }
+      if (now - t0 > 90000 || (auto && (spoke ? now - lastLoud > 1600 : now - t0 > 9000))) stop();
+    }, 100);
+    hearing = { stop: (cancel) => ((cancelled = cancel), stop()) };
+    recorder.start();
+    await stopped;
+    clearInterval(watch);
+    stream.getTracks().forEach((t) => t.stop());
+    ctx.close();
+    hearing = null;
+    if (cancelled || !spoke) {
+      lamp("");
+      return null;
+    }
+    lamp("busy");
+    try {
+      const res = await fetch("/api/stt", { method: "POST", headers: { "content-type": recorder.mimeType || "audio/webm" }, body: new Blob(chunks, { type: recorder.mimeType }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Transcription failed.");
+      show(data.text);
+      return data.text.trim() || null;
+    } catch (err) {
+      toast(err.message, true);
+      return null;
+    } finally {
+      lamp("");
+    }
+  })();
+}
+
+/** Hands-free: after a reply has been spoken, open the microphone and send what is heard. */
+async function takeTurnByVoice(mode) {
+  if (!talkOn() || R.mode !== mode || R.busy || hearing) return;
+  const text = await hear({ auto: true });
+  if (text && R.mode === mode && !R.busy) R.send?.(text);
 }
 
 // ---- playbook -------------------------------------------------------------------------------
@@ -682,7 +847,8 @@ function playbook() {
 // ---- router ---------------------------------------------------------------------------------
 
 async function route() {
-  speechSynthesis?.cancel();
+  stopSpeaking();
+  stopHearing();
   document.querySelectorAll(".modal").forEach((m) => m.remove());
   const [, kind, id, sub] = location.hash.split("/");
   try {

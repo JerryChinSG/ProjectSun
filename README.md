@@ -29,6 +29,12 @@ To click around without spending anything: `npm run mock` (canned replies, no AP
 
 Around the rooms: a gut-check stance before you learn anything, a chart of how your stance drifts, the cruxes the disagreement turns on, a facts sheet, a streak, and minutes practised today. There is a microphone button for speaking answers and a toggle to have replies read aloud (both use the browser's built-in speech features, so Chrome works best).
 
+## Talking to it
+
+Every room has a microphone button, a **Voice** toggle that reads replies aloud, and a **Conversation** toggle for hands-free back and forth: the reply is spoken, the microphone opens, and what you say is sent when you stop talking. Tap the microphone to interrupt.
+
+Out of the box this uses the browser's own speech features, which are free (recognition works in Chrome, Edge and Safari). For natural voices, put an ElevenLabs key in `.env` as `ELEVENLABS_API_KEY`. Each speaker then gets a different ElevenLabs voice, and browsers without built-in recognition, such as Firefox, can use the microphone through ElevenLabs transcription. If the ElevenLabs quota runs out, Crux falls back to the browser voice.
+
 ## Cost and the budget cap
 
 The header shows a running estimate of what the app has spent. `BUDGET_USD` in `.env` (default 100) is a hard stop: once the estimate reaches it, Crux refuses further calls. The estimate uses list prices in `lib/ai.js`; the Anthropic Console is the source of truth.
