@@ -67,7 +67,7 @@ Open https://crux.jclife.online. The browser asks for a login: any username, and
 ## Updating later
 
 ```bash
-cd /opt/crux && sudo -u crux git pull && sudo -u crux npm install --omit=dev && sudo systemctl restart crux
+sudo bash /opt/crux/deploy/update.sh
 ```
 
 Your topics live in `/opt/crux/data` and are not touched by updates. Back that folder up if you care about them.
