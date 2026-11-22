@@ -18,7 +18,8 @@ sudo apt-get install -y nodejs
 ## 3. Get the code
 
 ```bash
-sudo useradd --system --create-home --home-dir /opt/crux --shell /usr/sbin/nologin crux
+sudo useradd --system --home-dir /opt/crux --shell /usr/sbin/nologin crux
+sudo mkdir -p /opt/crux && sudo chown crux: /opt/crux
 sudo -u crux git clone -b ccr-e158ecf7-f0v2ss https://github.com/JerryChinSG/ProjectSun.git /opt/crux
 cd /opt/crux && sudo -u crux npm install --omit=dev
 ```
