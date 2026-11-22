@@ -1,0 +1,21 @@
+# systemd unit for Crux. Install with:
+#   sudo cp deploy/crux.service /etc/systemd/system/crux.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now crux
+[Unit]
+Description=Crux (learn by arguing)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=crux
+WorkingDirectory=/opt/crux
+ExecStart=/usr/bin/env node server.js
+Restart=on-failure
+RestartSec=3
+# Settings (API key, password, port, budget) are read from /opt/crux/.env by the app itself.
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
